@@ -1,5 +1,6 @@
 [workspace]
 members = [
-    "fqtt-client",
+    "fqttc",
     "fqttd",
+    "mqtt3"
 ]

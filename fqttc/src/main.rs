@@ -1,7 +1,15 @@
+use std::{
+    num::{NonZeroU16, NonZeroUsize},
+    time::Duration,
+};
+
 use anyhow::{Context, Result};
 use argh::FromArgs;
+use bytes::BytesMut;
 use futures_util::future;
+use mqtt3::proto::{ClientId, Connect, Packet, PacketCodec, PacketIdentifierDupQoS, Publish};
 use tokio::net::TcpStream;
+use tokio_util::codec::Encoder;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -9,7 +17,7 @@ async fn main() -> Result<()> {
 
     match opts.mode {
         Mode::Publisher(config) => {
-            let publishers: Vec<_> = (0..100)
+            let publishers: Vec<_> = (0..config.clients.get())
                 .map(|_| tokio::spawn(publisher(config.clone())))
                 .collect();
             let results = future::try_join_all(publishers).await?;
@@ -30,24 +38,38 @@ async fn publisher(config: Publisher) -> Result<()> {
         .await
         .with_context(|| format!("unable to connect to broker {}", config.broker))?;
 
-    let mut buffer = vec![0; 8 * 1024];
-
     socket.writable().await?;
-    socket.try_write(b"connect")?;
+
+    let connect = Connect {
+        username: None,
+        password: None,
+        will: None,
+        client_id: ClientId::ServerGenerated,
+        keep_alive: Duration::from_secs(5),
+        protocol_name: mqtt3::PROTOCOL_NAME.into(),
+        protocol_level: mqtt3::PROTOCOL_LEVEL,
+    };
+    let mut packet = BytesMut::with_capacity(8 * 1024);
+    let mut codec = PacketCodec::default();
+    codec.encode(Packet::Connect(connect), &mut packet)?;
+
+    socket.try_write(&packet)?;
 
     socket.readable().await?;
+
+    let mut buffer = vec![0; 8 * 1024];
     let _ = socket.try_read(&mut buffer[..])?;
 
-    let packet = [
-        0x30, 0x6a, 0x00, 0x05, 0x74, 0x6f, 0x70, 0x69, 0x63, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-        0x30, 0x30, 0x30,
-    ];
+    let publish = Publish {
+        packet_identifier_dup_qos: PacketIdentifierDupQoS::AtMostOnce,
+        retain: false,
+        topic_name: config.topic,
+        payload: vec![0; config.message_size.get()].into(),
+    };
+
+    let mut packet = BytesMut::with_capacity(8 * 1024);
+    let mut codec = PacketCodec::default();
+    codec.encode(Packet::Publish(publish), &mut packet)?;
 
     loop {
         socket.writable().await?;
@@ -92,6 +114,18 @@ struct Publisher {
     /// MQTT broker endpoint.
     #[argh(option, short = 'b', default = "String::from(\"locahost:1883\")")]
     broker: String,
+
+    /// number of clients.
+    #[argh(option, short = 'c', default = "NonZeroU16::new(5).unwrap()")]
+    clients: NonZeroU16,
+
+    /// MQTT topic to publish to.
+    #[argh(option, short = 't')]
+    topic: String,
+
+    /// MQTT message payload size.
+    #[argh(option, short = 'm')]
+    message_size: NonZeroUsize,
 }
 
 /// A simple MQTT client will subscribe to a topic and will receive messages until stopped.
