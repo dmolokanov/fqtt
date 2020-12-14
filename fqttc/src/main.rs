@@ -71,15 +71,20 @@ async fn publisher(config: Publisher) -> Result<()> {
     let mut codec = PacketCodec::default();
     codec.encode(Packet::Publish(publish), &mut packet)?;
 
+    let mut offset = 0;
     loop {
         socket.writable().await?;
 
-        match socket.try_write(&packet) {
+        match socket.try_write(&packet[offset..]) {
             Ok(0) => {
                 break;
             }
-            Ok(_n) => {
-                // println!("{}", n);
+            Ok(written) => {
+                if offset + written == packet.len() {
+                    offset = 0;
+                } else {
+                    offset += written;
+                }
             }
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                 continue;

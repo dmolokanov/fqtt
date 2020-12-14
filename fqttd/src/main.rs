@@ -24,7 +24,12 @@ async fn main() -> Result<()> {
     tokio::spawn(print_metrics(counters.clone()));
 
     while let Ok(Some(socket)) = listener.try_next().await {
-        tokio::spawn(process_incoming(socket, counters.clone()));
+        let counters = counters.clone();
+        tokio::spawn(async move {
+            if let Err(e) = process_incoming(socket, counters).await {
+                println!("error = {}", e);
+            }
+        });
     }
 
     // let local = tokio::task::LocalSet::new();
@@ -111,8 +116,8 @@ async fn print_metrics(counters: Counters) {
     while let Some(tick) = interval.next().await {
         let elapsed = tick.duration_since(now);
 
-        // let messages = counters.messages.swap(0, Ordering::Relaxed);
-        // let messages = messages as f64 / elapsed.as_secs_f64();
+        let messages = counters.messages.swap(0, Ordering::Relaxed);
+        let messages = messages as f64 / elapsed.as_secs_f64();
 
         let bytes = counters.bytes.swap(0, Ordering::Relaxed);
         let bytes = bytes as f64 / elapsed.as_secs_f64();
@@ -124,7 +129,7 @@ async fn print_metrics(counters: Counters) {
             }
         };
 
-        println!("ingress: {} ", throughput);
+        println!("{} msg/sec, {} ", messages, throughput);
 
         now = tick;
     }
