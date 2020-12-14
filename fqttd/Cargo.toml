@@ -6,8 +6,10 @@ edition = "2018"
 
 [dependencies]
 tokio = { version = "0.3", features = ["full"] }
-futures = "0.3.8"
+futures-util = { version = "0.3.8", features = ["sink"] }
 bytes = "0.6.0"
 argh = "0.1.4"
 anyhow = "1.0.35"
 number_prefix = "0.4.0"
+tokio-util = { version = "0.5", features = ["codec"] }
+mqtt3 =  { path = "../mqtt3" }

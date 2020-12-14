@@ -6,13 +6,12 @@ use std::{
     time::Duration,
 };
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use argh::FromArgs;
-use tokio::{
-    io::Interest,
-    net::{TcpListener, TcpStream},
-    stream::StreamExt,
-};
+use futures_util::{sink::SinkExt, StreamExt, TryStreamExt};
+use mqtt3::proto::{ConnAck, ConnectReturnCode, Packet, PacketCodec};
+use tokio::net::{TcpListener, TcpStream};
+use tokio_util::codec::Framed;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -42,37 +41,63 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+// async fn process_incoming(socket: TcpStream, counters: Counters) -> Result<()> {
+//     let mut buffer = vec![0_u8; 8 * 1024 * 1024];
+
+//     socket.readable().await?;
+//     let _n = socket.try_read(&mut buffer[..])?;
+//     // println!("recv: {:?}", &buffer[..n]);
+
+//     let connack = [0x20, 0x02, 0x00, 0x00];
+//     socket.try_write(&connack)?;
+
+//     loop {
+//         let ready = socket.ready(Interest::READABLE).await?;
+
+//         if ready.is_readable() {
+//             let n = match socket.try_read(&mut buffer[..]) {
+//                 Ok(0) => break,
+//                 Ok(n) => n,
+//                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+//                     continue;
+//                 }
+//                 Err(e) => return Err(e.into()),
+//             };
+
+//             counters.messages.fetch_add(1, Ordering::Relaxed);
+//             counters.bytes.fetch_add(n as u64, Ordering::Relaxed);
+
+//             // println!("recv: {:?}", &buffer[..n]);
+//         }
+
+//         if counters.messages.load(Ordering::Relaxed) % 1000 == 0 {
+//             tokio::task::yield_now().await;
+//         }
+//     }
+
+//     Ok(())
+// }
+
 async fn process_incoming(socket: TcpStream, counters: Counters) -> Result<()> {
-    let mut buffer = vec![0_u8; 8 * 1024 * 1024];
+    let mut codec = Framed::new(socket, PacketCodec::default());
 
-    socket.readable().await?;
-    let _n = socket.try_read(&mut buffer[..])?;
-    // println!("recv: {:?}", &buffer[..n]);
+    match codec.try_next().await? {
+        Some(Packet::Connect(_connect)) => {
+            let connack = Packet::ConnAck(ConnAck {
+                session_present: false,
+                return_code: ConnectReturnCode::Accepted,
+            });
+            codec.send(connack).await?
+        }
+        _ => bail!("not CONNECT packet"),
+    };
 
-    let connack = [0x20, 0x02, 0x00, 0x00];
-    socket.try_write(&connack)?;
-
-    loop {
-        let ready = socket.ready(Interest::READABLE).await?;
-
-        if ready.is_readable() {
-            let n = match socket.try_read(&mut buffer[..]) {
-                Ok(0) => break,
-                Ok(n) => n,
-                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    continue;
-                }
-                Err(e) => return Err(e.into()),
-            };
+    while let Some(packet) = codec.try_next().await? {
+        if let Packet::Publish(p) = packet {
+            let len = p.topic_name.len() + p.payload.len();
+            counters.bytes.fetch_add(len as u64, Ordering::Relaxed);
 
             counters.messages.fetch_add(1, Ordering::Relaxed);
-            counters.bytes.fetch_add(n as u64, Ordering::Relaxed);
-
-            // println!("recv: {:?}", &buffer[..n]);
-        }
-
-        if counters.messages.load(Ordering::Relaxed) % 1000 == 0 {
-            tokio::task::yield_now().await;
         }
     }
 
