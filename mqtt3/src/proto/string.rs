@@ -1,9 +1,5 @@
 //! A UTF-8 encoded read-only string using Bytes as storage.
 
-#![deny(rust_2018_idioms, nonstandard_style)]
-#![doc(html_logo_url = "https://actix.rs/img/logo.png")]
-#![doc(html_favicon_url = "https://actix.rs/favicon.ico")]
-
 use std::convert::TryFrom;
 use std::{borrow, fmt, hash, ops, str};
 
