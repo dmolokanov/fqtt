@@ -63,7 +63,7 @@ async fn publisher(config: Publisher) -> Result<()> {
     let publish = Publish {
         packet_identifier_dup_qos: PacketIdentifierDupQoS::AtMostOnce,
         retain: false,
-        topic_name: config.topic,
+        topic_name: config.topic.into(),
         payload: vec![0; config.message_size.get()].into(),
     };
 

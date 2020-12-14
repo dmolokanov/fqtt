@@ -5,7 +5,7 @@ use bytes::{Buf, BufMut};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tokio_util::codec::Decoder;
 
-use crate::proto::{BufMutExt, ByteBuf};
+use crate::proto::{BufMutExt, ByteBuf, ByteString};
 
 /// An MQTT packet
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -128,12 +128,12 @@ impl PacketMeta for ConnAck {
 /// Ref: 3.1 CONNECT – Client requests a connection to a Server
 #[derive(Clone, Eq, PartialEq)]
 pub struct Connect {
-    pub username: Option<String>,
-    pub password: Option<String>,
+    pub username: Option<ByteString>,
+    pub password: Option<ByteString>,
     pub will: Option<Publication>,
     pub client_id: super::ClientId,
     pub keep_alive: Duration,
-    pub protocol_name: String,
+    pub protocol_name: ByteString,
     pub protocol_level: u8,
 }
 
@@ -489,7 +489,7 @@ impl PacketMeta for PubComp {
 pub struct Publish {
     pub packet_identifier_dup_qos: PacketIdentifierDupQoS,
     pub retain: bool,
-    pub topic_name: String,
+    pub topic_name: ByteString,
     #[cfg_attr(feature = "serde1", serde(serialize_with = "serialize_bytes"))]
     #[cfg_attr(feature = "serde1", serde(deserialize_with = "deserialize_bytes"))]
     pub payload: bytes::Bytes,
@@ -795,7 +795,7 @@ impl PacketMeta for UnsubAck {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Unsubscribe {
     pub packet_identifier: super::PacketIdentifier,
-    pub unsubscribe_from: Vec<String>,
+    pub unsubscribe_from: Vec<ByteString>,
 }
 
 impl PacketMeta for Unsubscribe {
@@ -865,7 +865,7 @@ pub enum PacketIdentifierDupQoS {
 /// A subscription request.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SubscribeTo {
-    pub topic_filter: String,
+    pub topic_filter: ByteString,
     pub qos: QoS,
 }
 
@@ -918,7 +918,7 @@ impl From<SubAckQos> for u8 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "serde1", derive(Deserialize, Serialize))]
 pub struct Publication {
-    pub topic_name: String,
+    pub topic_name: ByteString,
     pub qos: crate::proto::QoS,
     pub retain: bool,
     #[cfg_attr(feature = "serde1", serde(serialize_with = "serialize_bytes"))]

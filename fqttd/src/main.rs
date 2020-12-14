@@ -104,6 +104,10 @@ async fn process_incoming(socket: TcpStream, counters: Counters) -> Result<()> {
 
             counters.messages.fetch_add(1, Ordering::Relaxed);
         }
+
+        if counters.messages.load(Ordering::Relaxed) % 1000 == 0 {
+            tokio::task::yield_now().await;
+        }
     }
 
     Ok(())

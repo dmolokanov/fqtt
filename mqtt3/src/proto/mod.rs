@@ -15,6 +15,9 @@ pub use packet::{
     SubscribeTo, UnsubAck, Unsubscribe,
 };
 
+mod string;
+pub use string::ByteString;
+
 /// The client ID
 ///
 /// Refs:
@@ -23,8 +26,8 @@ pub use packet::{
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ClientId {
     ServerGenerated,
-    IdWithCleanSession(String),
-    IdWithExistingSession(String),
+    IdWithCleanSession(ByteString),
+    IdWithExistingSession(ByteString),
 }
 
 /// The return code for a connection attempt
@@ -99,7 +102,7 @@ impl Default for Utf8StringDecoder {
 }
 
 impl tokio_util::codec::Decoder for Utf8StringDecoder {
-    type Item = String;
+    type Item = ByteString;
     type Error = DecodeError;
 
     fn decode(&mut self, src: &mut bytes::BytesMut) -> Result<Option<Self::Item>, Self::Error> {
@@ -118,8 +121,8 @@ impl tokio_util::codec::Decoder for Utf8StringDecoder {
                         return Ok(None);
                     }
 
-                    let s = match std::str::from_utf8(&src.split_to(*len)) {
-                        Ok(s) => s.to_string(),
+                    let s = match src.split_to(*len).freeze().try_into() {
+                        Ok(s) => s,
                         Err(err) => return Err(DecodeError::StringNotUtf8(err)),
                     };
                     *self = Utf8StringDecoder::Empty;
@@ -291,7 +294,7 @@ pub enum DecodeError {
         remaining_length: usize,
     },
     UnrecognizedProtocolLevel(u8),
-    UnrecognizedProtocolName(String),
+    UnrecognizedProtocolName(ByteString),
     UnrecognizedQoS(u8),
     ZeroPacketIdentifier,
 }
