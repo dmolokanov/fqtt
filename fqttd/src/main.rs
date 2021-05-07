@@ -13,9 +13,26 @@ use mqtt3::proto::{ConnAck, ConnectReturnCode, Packet, PacketCodec};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_util::codec::Framed;
 
+fn setup_global_subscriber() -> impl Drop {
+    use std::{fs::File, io::BufWriter};
+    use tracing_flame::FlameLayer;
+    use tracing_subscriber::{fmt, prelude::*, registry::Registry};
+
+    let fmt_layer = fmt::Layer::default();
+
+    let (flame_layer, _guard) = FlameLayer::with_file("./tracing.folded").unwrap();
+
+    let subscriber = Registry::default().with(fmt_layer).with(flame_layer);
+
+    tracing::subscriber::set_global_default(subscriber).expect("Could not set global default");
+    _guard
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let opts: Opts = argh::from_env();
+
+    let _ = setup_global_subscriber();
 
     let mut listener = TcpListener::bind(("0.0.0.0", opts.port)).await?;
     println!("Listening on: {}", listener.local_addr()?);
